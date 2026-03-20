@@ -52,8 +52,24 @@ python query.py --chat
 
 Options for both query modes:
 - `--top-k 4` — number of chunks to retrieve (default: 4)
+- `--provider github` — use GitHub Models (GPT-4.1) instead of local Ollama
 
 In chat mode, follow-up questions like "How do I create one?" will be understood in context of the conversation.
+
+### Using GitHub Models
+
+To use cloud models via [GitHub Models](https://github.com/marketplace/models) instead of local Ollama:
+
+1. Create a [Personal Access Token](https://github.com/settings/tokens) with the `models` scope
+2. Add it to your `.env` file: `GITHUB_TOKEN=ghp_...`
+3. Run with `--provider github`:
+
+```bash
+python query.py --provider github "What is git bisect?"
+python query.py --provider github --chat
+```
+
+This swaps the LLM only (embeddings stay local via Ollama). No need to re-ingest documents.
 
 ## Architecture
 

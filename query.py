@@ -20,6 +20,8 @@ CHROMA_DIR = Path("chroma_data")
 COLLECTION_NAME = "local-docs"
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 LLM_MODEL = os.getenv("LLM_MODEL", "qwen3.5:2b")
+GITHUB_MODEL = os.getenv("GITHUB_MODEL", "openai/gpt-4.1")
+GITHUB_MODELS_URL = "https://models.github.ai/inference"
 
 # Rewrites a follow-up question into a standalone question using chat history.
 # e.g. "What about volumes?" after discussing Docker → "What are Docker volumes?"
@@ -66,10 +68,28 @@ def print_sources(docs):
             print(f"  • {source}")
 
 
+def create_llm(provider: str):
+    """Create the LLM based on the selected provider."""
+    if provider == "github":
+        from langchain_openai import ChatOpenAI
+
+        token = os.getenv("GITHUB_TOKEN")
+        if not token:
+            print("Error: GITHUB_TOKEN not set in .env. Create a PAT with 'models' scope.")
+            sys.exit(1)
+        return ChatOpenAI(
+            model=GITHUB_MODEL,
+            api_key=token,
+            base_url=GITHUB_MODELS_URL,
+        )
+    else:
+        return ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL)
+
+
 class RAGPipeline:
     """RAG pipeline with optional conversational memory."""
 
-    def __init__(self, top_k: int = 4):
+    def __init__(self, top_k: int = 4, provider: str = "ollama"):
         embeddings = OllamaEmbeddings(
             model="nomic-embed-text",
             base_url=OLLAMA_BASE_URL,
@@ -80,7 +100,7 @@ class RAGPipeline:
             persist_directory=str(CHROMA_DIR),
         )
         self.retriever = self.vector_store.as_retriever(search_kwargs={"k": top_k})
-        self.llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL)
+        self.llm = create_llm(provider)
         self.chat_history: list = []
         self.history_window = 5
 
@@ -151,6 +171,8 @@ def parse_args():
     parser.add_argument("question", nargs="?", help="question to ask (omit for --chat mode)")
     parser.add_argument("--chat", action="store_true", help="interactive multi-turn chat mode")
     parser.add_argument("--top-k", type=int, default=4, help="number of chunks to retrieve (default: 4)")
+    parser.add_argument("--provider", choices=["ollama", "github"], default="ollama",
+                        help="LLM provider: ollama (local, default) or github (GitHub Models API)")
     return parser.parse_args()
 
 
@@ -160,7 +182,7 @@ def main():
         sys.exit(1)
 
     args = parse_args()
-    pipeline = RAGPipeline(top_k=args.top_k)
+    pipeline = RAGPipeline(top_k=args.top_k, provider=args.provider)
 
     if args.chat:
         pipeline.chat()
@@ -169,7 +191,7 @@ def main():
     else:
         print('Usage: python query.py "your question"')
         print('       python query.py --chat')
-        print('       python query.py --top-k 6 "your question"')
+        print('       python query.py --provider github "your question"')
         sys.exit(1)
 
 
