@@ -1,5 +1,6 @@
 """Query the Chroma vector store and answer questions with cited sources."""
 
+import argparse
 import os
 import sys
 from pathlib import Path
@@ -19,8 +20,6 @@ CHROMA_DIR = Path("chroma_data")
 COLLECTION_NAME = "local-docs"
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 LLM_MODEL = os.getenv("LLM_MODEL", "qwen3.5:2b")
-TOP_K = 4
-HISTORY_WINDOW = 5
 
 # Rewrites a follow-up question into a standalone question using chat history.
 # e.g. "What about volumes?" after discussing Docker → "What are Docker volumes?"
@@ -70,7 +69,7 @@ def print_sources(docs):
 class RAGPipeline:
     """RAG pipeline with optional conversational memory."""
 
-    def __init__(self):
+    def __init__(self, top_k: int = 4):
         embeddings = OllamaEmbeddings(
             model="nomic-embed-text",
             base_url=OLLAMA_BASE_URL,
@@ -80,9 +79,10 @@ class RAGPipeline:
             embedding_function=embeddings,
             persist_directory=str(CHROMA_DIR),
         )
-        self.retriever = self.vector_store.as_retriever(search_kwargs={"k": TOP_K})
+        self.retriever = self.vector_store.as_retriever(search_kwargs={"k": top_k})
         self.llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL)
         self.chat_history: list = []
+        self.history_window = 5
 
     def _contextualize_question(self, question: str) -> str:
         """Rewrite a follow-up question as standalone using chat history."""
@@ -92,7 +92,7 @@ class RAGPipeline:
         print("  (rewriting question with context...)", flush=True)
         chain = CONTEXTUALIZE_PROMPT | self.llm | StrOutputParser()
         # Only send the last N turns to avoid overflowing context
-        history = self.chat_history[-(HISTORY_WINDOW * 2):]
+        history = self.chat_history[-(self.history_window * 2):]
         return chain.invoke({"question": question, "chat_history": history})
 
     def ask(self, question: str) -> str:
@@ -146,20 +146,30 @@ class RAGPipeline:
             self.ask(question)
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Query the RAG vector store")
+    parser.add_argument("question", nargs="?", help="question to ask (omit for --chat mode)")
+    parser.add_argument("--chat", action="store_true", help="interactive multi-turn chat mode")
+    parser.add_argument("--top-k", type=int, default=4, help="number of chunks to retrieve (default: 4)")
+    return parser.parse_args()
+
+
 def main():
     if not CHROMA_DIR.exists():
         print("No vector store found. Run ingest.py first.")
         sys.exit(1)
 
-    pipeline = RAGPipeline()
+    args = parse_args()
+    pipeline = RAGPipeline(top_k=args.top_k)
 
-    if "--chat" in sys.argv:
+    if args.chat:
         pipeline.chat()
-    elif len(sys.argv) >= 2 and not sys.argv[1].startswith("--"):
-        pipeline.ask(sys.argv[1])
+    elif args.question:
+        pipeline.ask(args.question)
     else:
         print('Usage: python query.py "your question"')
         print('       python query.py --chat')
+        print('       python query.py --top-k 6 "your question"')
         sys.exit(1)
 
 

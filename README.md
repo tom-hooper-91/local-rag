@@ -33,6 +33,11 @@ Place your `.md` files in the `docs/` directory, then run:
 python ingest.py
 ```
 
+Options:
+- `--chunk-size 500` — chunk size in characters (default: 500)
+- `--overlap 50` — chunk overlap in characters (default: 50)
+- `--reindex` — delete existing vector store before re-ingesting
+
 ### Query (single-shot)
 
 ```bash
@@ -44,6 +49,9 @@ python query.py "What is the purpose of X?"
 ```bash
 python query.py --chat
 ```
+
+Options for both query modes:
+- `--top-k 4` — number of chunks to retrieve (default: 4)
 
 In chat mode, follow-up questions like "How do I create one?" will be understood in context of the conversation.
 
