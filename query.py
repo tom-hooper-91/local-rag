@@ -24,12 +24,13 @@ HISTORY_WINDOW = 5
 
 # Rewrites a follow-up question into a standalone question using chat history.
 # e.g. "What about volumes?" after discussing Docker → "What are Docker volumes?"
+# /no_think disables qwen3.5's internal reasoning to avoid 30-60s hidden latency.
 CONTEXTUALIZE_PROMPT = ChatPromptTemplate.from_messages([
     ("system",
      "Given the chat history and a follow-up question, rewrite the question "
      "to be a standalone question that doesn't require the chat history to understand. "
      "If the question is already standalone, return it unchanged. "
-     "Do NOT answer the question — only rewrite it."),
+     "Do NOT answer the question — only rewrite it. /no_think"),
     MessagesPlaceholder("chat_history"),
     ("human", "{question}"),
 ])
@@ -88,6 +89,7 @@ class RAGPipeline:
         if not self.chat_history:
             return question
 
+        print("  (rewriting question with context...)", flush=True)
         chain = CONTEXTUALIZE_PROMPT | self.llm | StrOutputParser()
         # Only send the last N turns to avoid overflowing context
         history = self.chat_history[-(HISTORY_WINDOW * 2):]
